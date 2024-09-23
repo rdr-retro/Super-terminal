@@ -6,7 +6,16 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
-#include <SDL2/SDL_clipboard.h>  // Para la funcionalidad de copiar
+#include <pty.h>
+#include <utmp.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <unistd.h>    // Para fork, close, setsid, dup2, execv
+#include <sys/types.h> // Para pid_t
+#include <sys/wait.h>  // Para waitpid
+#include <fcntl.h>     // Para open
+#include <errno.h>     // Para manejar errores
+
 
 #define FRAME_DELAY 100
 #define NUM_FRAMES 17
@@ -57,9 +66,11 @@
 #define COLOR_BAR_FILL_G 255
 #define COLOR_BAR_FILL_B 255
 
+
 typedef struct {
     char command[MAX_INPUT_LENGTH];
     char output[MAX_OUTPUT_LENGTH];
+    int master_fd;
 } CommandData;
 
 int getRealCPUUsage() {
@@ -141,21 +152,68 @@ void cleanup(SDL_Texture *textures[], SDL_Renderer *renderer, SDL_Window *window
 
 void* execute_command(void* arg) {
     CommandData* cmdData = (CommandData*)arg;
-    FILE* fp;
-    char buffer[128];
-
-    fp = popen(cmdData->command, "r");
-    if (fp == NULL) {
-        snprintf(cmdData->output, MAX_OUTPUT_LENGTH, "Error al ejecutar el comando.");
+    int master, slave;
+    char *slave_name;
+    
+    if (openpty(&master, &slave, NULL, NULL, NULL) == -1) {
+        snprintf(cmdData->output, MAX_OUTPUT_LENGTH, "Error al abrir pty.");
         return NULL;
     }
 
-    cmdData->output[0] = '\0';
-    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-        strncat(cmdData->output, buffer, MAX_OUTPUT_LENGTH - strlen(cmdData->output) - 1);
+    pid_t pid = fork();
+    if (pid == -1) {
+        snprintf(cmdData->output, MAX_OUTPUT_LENGTH, "Error al crear proceso hijo.");
+        return NULL;
+    } else if (pid == 0) {
+        // Proceso hijo
+        close(master);
+        setsid();
+        dup2(slave, 0);
+        dup2(slave, 1);
+        dup2(slave, 2);
+        if (ioctl(slave, TIOCSCTTY, NULL) == -1) {
+            exit(1);
+        }
+        close(slave);
+        
+        char *args[] = {"/bin/sh", "-c", cmdData->command, NULL};
+        execv("/bin/sh", args);
+        exit(1);
+    } else {
+        // Proceso padre
+        close(slave);
+        cmdData->master_fd = master;
+        
+        fd_set readfds;
+        struct timeval tv;
+        int ret;
+        
+        cmdData->output[0] = '\0';
+        while (1) {
+            FD_ZERO(&readfds);
+            FD_SET(master, &readfds);
+            tv.tv_sec = 0;
+            tv.tv_usec = 100000;
+            
+            ret = select(master + 1, &readfds, NULL, NULL, &tv);
+            if (ret > 0) {
+                char buffer[1024];
+                int n = read(master, buffer, sizeof(buffer) - 1);
+                if (n <= 0) break;
+                buffer[n] = '\0';
+                strncat(cmdData->output, buffer, MAX_OUTPUT_LENGTH - strlen(cmdData->output) - 1);
+            } else if (ret == 0) {
+                // Timeout, verificar si el proceso hijo ha terminado
+                int status;
+                if (waitpid(pid, &status, WNOHANG) != 0) break;
+            } else {
+                break;
+            }
+        }
+        
+        close(master);
     }
-
-    pclose(fp);
+    
     return NULL;
 }
 
@@ -288,7 +346,9 @@ int main(int argc, char *argv[]) {
         frame_start = SDL_GetTicks();
 
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
+            if (cmdData.master_fd > 0) {
+    close(cmdData.master_fd);
+}if (event.type == SDL_QUIT) {
                 running = 0;
             } else if (event.type == SDL_TEXTINPUT) {
                 if (strlen(inputText) + strlen(event.text.text) < MAX_INPUT_LENGTH - 1) {
@@ -299,8 +359,9 @@ int main(int argc, char *argv[]) {
                     inputText[strlen(inputText) - 1] = '\0';
                 } else if (event.key.keysym.sym == SDLK_RETURN && strlen(inputText) > 0) {
     snprintf(cmdData.command, MAX_INPUT_LENGTH, "%s", inputText);
-    pthread_create(&commandThread, NULL, execute_command, (void*)&cmdData);
-    pthread_detach(commandThread);
+   pthread_create(&commandThread, NULL, execute_command, (void*)&cmdData);
+pthread_detach(commandThread);
+
     
     // Reiniciar el texto de entrada y el caret
     inputText[0] = '\0';
