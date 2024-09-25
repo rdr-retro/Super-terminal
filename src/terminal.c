@@ -342,55 +342,78 @@ int main(int argc, char *argv[]) {
     int caretVisible = 1;  // Variable para mostrar/ocultar el caret
     Uint32 caretTimer = SDL_GetTicks();  // Timer para el caret
 
-    while (running) {
-        frame_start = SDL_GetTicks();
+  // Define un cursor de escritura (puedes usar una imagen o el cursor predeterminado)
+SDL_Cursor* textCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM); // Cursor de escritura
+SDL_Cursor* defaultCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW); // Cursor por defecto
 
-        while (SDL_PollEvent(&event)) {
-            if (cmdData.master_fd > 0) {
-    close(cmdData.master_fd);
-}if (event.type == SDL_QUIT) {
-                running = 0;
-            } else if (event.type == SDL_TEXTINPUT) {
-                if (strlen(inputText) + strlen(event.text.text) < MAX_INPUT_LENGTH - 1) {
-                    strcat(inputText, event.text.text);
-                }
-            } else if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_BACKSPACE && strlen(inputText) > 0) {
-                    inputText[strlen(inputText) - 1] = '\0';
-                } else if (event.key.keysym.sym == SDLK_RETURN && strlen(inputText) > 0) {
-    snprintf(cmdData.command, MAX_INPUT_LENGTH, "%s", inputText);
-   pthread_create(&commandThread, NULL, execute_command, (void*)&cmdData);
-pthread_detach(commandThread);
+// En el bucle principal, justo después de procesar eventos:
+while (running) {
+    frame_start = SDL_GetTicks();
 
+    // Cambiar el cursor dependiendo de la posición del mouse
+    int mouseX, mouseY;
+    SDL_GetMouseState(&mouseX, &mouseY);
     
-    // Reiniciar el texto de entrada y el caret
-    inputText[0] = '\0';
-    caretVisible = 1;  // Asegúrate de que el caret esté visible de nuevo
-    caretTimer = SDL_GetTicks();  // Reiniciar el temporizador del caret
-}
-else if (event.key.keysym.sym == SDLK_UP) {
-                    scrollOffset -= 2;
-                    if (scrollOffset < 0) scrollOffset = 0;
-                } else if (event.key.keysym.sym == SDLK_DOWN) {
-                    scrollOffset += 2;
-                }
-            } else if (event.type == SDL_MOUSEWHEEL) {
-                scrollOffset += event.wheel.y * 10;  // Ajusta la sensibilidad aquí
-                if (scrollOffset < 0) scrollOffset = 0;
+    // Definir la caja de texto (ajusta la posición y el tamaño según tu código)
+    SDL_Rect inputBox = {BOX_MARGIN + LEFT_BOX_WIDTH + 8, BOX_VERTICAL_OFFSET + 8, 
+                         WINDOW_WIDTH - (BOX_MARGIN + LEFT_BOX_WIDTH + 16), 30}; // Suponiendo altura de 30
+
+    // Cambiar el cursor si el mouse está sobre la caja de texto
+    if (mouseX >= inputBox.x && mouseX <= inputBox.x + inputBox.w &&
+        mouseY >= inputBox.y && mouseY <= inputBox.y + inputBox.h) {
+        SDL_SetCursor(textCursor); // Cambiar a cursor de escritura
+    } else {
+        SDL_SetCursor(defaultCursor); // Cambiar al cursor por defecto
+    }
+
+    while (SDL_PollEvent(&event)) {
+        if (cmdData.master_fd > 0) {
+            close(cmdData.master_fd);
+        }
+        if (event.type == SDL_QUIT) {
+            running = 0;
+        } else if (event.type == SDL_TEXTINPUT) {
+            if (strlen(inputText) + strlen(event.text.text) < MAX_INPUT_LENGTH - 1) {
+                strcat(inputText, event.text.text);
             }
-        }
+        } else if (event.type == SDL_KEYDOWN) {
+            if (event.key.keysym.sym == SDLK_BACKSPACE && strlen(inputText) > 0) {
+                inputText[strlen(inputText) - 1] = '\0';
+            } else if (event.key.keysym.sym == SDLK_RETURN && strlen(inputText) > 0) {
+                snprintf(cmdData.command, MAX_INPUT_LENGTH, "%s", inputText);
+                pthread_create(&commandThread, NULL, execute_command, (void*)&cmdData);
+                pthread_detach(commandThread);
 
-        if (SDL_GetTicks() - lastUpdate >= 500) {
-            cpuUsage = getRealCPUUsage();
-            ramUsage = getRealRAMUsage();
-            lastUpdate = SDL_GetTicks();
+                // Reiniciar el texto de entrada y el caret
+                inputText[0] = '\0';
+                caretVisible = 1;  // Asegúrate de que el caret esté visible de nuevo
+                caretTimer = SDL_GetTicks();  // Reiniciar el temporizador del caret
+            } else if (event.key.keysym.sym == SDLK_UP) {
+                scrollOffset -= 2;
+                if (scrollOffset < 0) scrollOffset = 0;
+            } else if (event.key.keysym.sym == SDLK_DOWN) {
+                scrollOffset += 2;
+            }
+        } else if (event.type == SDL_MOUSEWHEEL) {
+            scrollOffset += event.wheel.y * 10;  // Ajusta la sensibilidad aquí
+            if (scrollOffset < 0) scrollOffset = 0;
         }
+    }
 
-        // Alternar la visibilidad del caret cada 500 ms
-        if (SDL_GetTicks() - caretTimer >= 500) {
-            caretVisible = !caretVisible;
-            caretTimer = SDL_GetTicks();
-        }
+    // Actualiza el uso de CPU y RAM solo si ha pasado el intervalo de actualización
+    static Uint32 lastUpdate = 0; // Variable estática para mantener el estado entre iteraciones
+    if (SDL_GetTicks() - lastUpdate >= 500) {
+        cpuUsage = getRealCPUUsage(); // Asegúrate de que esta función esté implementada correctamente
+        ramUsage = getRealRAMUsage(); // Asegúrate de que esta función esté implementada correctamente
+        lastUpdate = SDL_GetTicks();
+    }
+
+    // Alternar la visibilidad del caret cada 500 ms
+    static Uint32 caretTimer = 0; // Variable estática para mantener el estado entre iteraciones
+    if (SDL_GetTicks() - caretTimer >= 500) {
+        caretVisible = !caretVisible;
+        caretTimer = SDL_GetTicks();
+    }
 
         SDL_SetRenderDrawColor(renderer, COLOR_BACKGROUND_R, COLOR_BACKGROUND_G, COLOR_BACKGROUND_B, 255);
         SDL_RenderClear(renderer);
