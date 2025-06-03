@@ -700,7 +700,7 @@ int main() {
                         }
                     }
 
-                    // Botones exportar e importar CSV con diálogo gráfico zenity
+                    // Botón Exportar CSV: ampliado para toda el área del botón
                     sf::FloatRect botonExportarRect(centroX, 580, 180, 40);
                     if (botonExportarRect.contains(mouse)) {
                         std::string carpeta = seleccionarCarpetaZenity();
@@ -720,6 +720,7 @@ int main() {
                             }
                         }
                     }
+                    // Botón Importar CSV: ampliado para toda el área del botón
                     sf::FloatRect botonImportarRect(centroX + 220, 580, 180, 40);
                     if (botonImportarRect.contains(mouse)) {
                         std::string rutaCSV = seleccionarArchivoZenity();
@@ -1170,7 +1171,7 @@ int main() {
                 window.draw(btnBorrar);
             }
 
-            // Botones Exportar e Importar CSV visibles y activos
+            // Botones Exportar e Importar CSV visibles y activos (dibujados ya arriba)
             sf::RectangleShape botonExportar(sf::Vector2f(180, 40));
             botonExportar.setFillColor(azulLinaje);
             botonExportar.setPosition(centroX, 580);
