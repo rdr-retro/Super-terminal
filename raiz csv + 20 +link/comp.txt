@@ -1,0 +1,5 @@
+g++ main.cpp xor_lib.o -o pantallas `pkg-config --cflags --libs sfml-graphics sfml-window sfml-system opencv4`
+
+prueba:
+1Vr8zFKdhzOtxOQJvEDq
+NNVdUH11
