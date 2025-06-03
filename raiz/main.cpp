@@ -428,6 +428,12 @@ int main() {
 
     std::vector<bool> mostrarClave;
 
+    // --- NUEVAS VARIABLES PARA SCROLL ---
+    float scrollOffset = 0.f; // desplazamiento vertical actual en píxeles
+    const float alturaFila = 40.f; // altura fija por fila (coherente con dibujo)
+    const float areaAlturaMaxima = 400.f; // altura visible de la lista en píxeles
+    // -----------------------------------
+
     const sf::Color filaPar = fondoFilaPar;
     const sf::Color filaImpar = fondoFilaImpar;
     const sf::Color filaSeleccion = filaSeleccionada;
@@ -436,6 +442,21 @@ int main() {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) window.close();
+
+            // --- Manejo del scroll con rueda del ratón ---
+            if (estado == Estado::Capsula && event.type == sf::Event::MouseWheelScrolled) {
+                if (event.mouseWheelScroll.wheel == sf::Mouse::VerticalWheel) {
+                    float delta = event.mouseWheelScroll.delta * 30.f; // Sensibilidad, 30px por tick
+                    scrollOffset -= delta; // desplazamos la lista: rueda hacia adelante baja offset
+
+                    // Limitar scrollOffset para no sobrepasar límite inferior
+                    float contenidoAltura = entradasCapsula.size() * alturaFila;
+                    float maxOffset = std::max(0.f, contenidoAltura - areaAlturaMaxima);
+                    if (scrollOffset < 0) scrollOffset = 0;
+                    if (scrollOffset > maxOffset) scrollOffset = maxOffset;
+                }
+            }
+            // ---------------------------------------------
 
             if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::F5) {
                 try {
@@ -593,6 +614,9 @@ int main() {
                                 actualizandoEntradas = true;
                                 campoPassword.activo = false;
                                 campoSeleccionado = nullptr;
+
+                                // Reiniciar scroll al entrar en cápsula para evitar confusión
+                                scrollOffset = 0.f;
                             } else mensajeSistema = "Contraseña incorrecta.";
                         }
                     }
@@ -621,6 +645,9 @@ int main() {
                     if (entradaSeleccionada >= (int)entradasCapsula.size()) entradaSeleccionada = (int)entradasCapsula.size() - 1;
                     if (entradaSeleccionada < 0) entradaSeleccionada = 0;
                     actualizandoEntradas = false;
+
+                    // Reiniciar scroll al actualizar lista para evitar errores
+                    scrollOffset = 0.f;
                 }
                 if (event.type == sf::Event::KeyPressed) {
                     if (event.key.code == sf::Keyboard::Escape) {
@@ -660,7 +687,6 @@ int main() {
                 if (event.type == sf::Event::MouseButtonPressed) {
                     sf::Vector2f mouse = (sf::Vector2f)sf::Mouse::getPosition(window);
                     float yInicio = 230;
-                    const float alturaFila = 40;
                     const float anchoTabla = 400.f;
                     const float centroX = (800 - anchoTabla) / 2.f;
 
@@ -679,8 +705,12 @@ int main() {
                         estado = Estado::CapsulaAñadir;
                     }
 
+                    // Ahora para los botones en filas, consideramos scrollOffset:
                     for (size_t i = 0; i < entradasCapsula.size(); ++i) {
-                        float yFila = yInicio + alturaFila * i;
+                        float yFila = yInicio + alturaFila * i - scrollOffset;
+
+                        // Solo considerar filas visibles para optimizar y evitar clics invisibles
+                        if (yFila + alturaFila < 150 || yFila > 600) continue;
 
                         sf::FloatRect botonMostrar(centroX + 270 + 160, yFila + 7, 30.f, 30.f);
                         if (botonMostrar.contains(mouse)) {
@@ -1121,13 +1151,17 @@ int main() {
             window.draw(cabUsuario);
             window.draw(cabClave);
 
+            // DIBUJO DE LISTA DESPLAZABLE CON SCROLL
             float yInicio = 230;
-            const float alturaFila = 40;
-
             for (size_t i = 0; i < entradasCapsula.size(); ++i) {
+                float yFila = yInicio + alturaFila * i - scrollOffset;
+
+                // Solo dibujar filas visibles para optimizar
+                if (yFila + alturaFila < 150 || yFila > 600) continue;
+
                 sf::Color fondo = (i == (size_t)entradaSeleccionada) ? filaSeleccion : ((i % 2 == 0) ? filaPar : filaImpar);
                 sf::RectangleShape fila(sf::Vector2f(anchoBoton, alturaFila));
-                fila.setPosition(centroX, yInicio + alturaFila * i);
+                fila.setPosition(centroX, yFila);
                 fila.setFillColor(fondo);
                 window.draw(fila);
 
@@ -1159,11 +1193,11 @@ int main() {
                     std::string s = "X";
                     btnBorrar.setString(sf::String::fromUtf8(s.begin(), s.end()));
                 }
-                txtServicio.setPosition(xServicio, yInicio + alturaFila * i + 7);
-                txtUsuario.setPosition(xUsuario, yInicio + alturaFila * i + 7);
-                txtClave.setPosition(xClave, yInicio + alturaFila * i + 7);
-                btnMostrar.setPosition(xClave + 160, yInicio + alturaFila * i + 7);
-                btnBorrar.setPosition(xClave + 200, yInicio + alturaFila * i + 7);
+                txtServicio.setPosition(xServicio, yFila + 7);
+                txtUsuario.setPosition(xUsuario, yFila + 7);
+                txtClave.setPosition(xClave, yFila + 7);
+                btnMostrar.setPosition(xClave + 160, yFila + 7);
+                btnBorrar.setPosition(xClave + 200, yFila + 7);
                 window.draw(txtServicio);
                 window.draw(txtUsuario);
                 window.draw(txtClave);
